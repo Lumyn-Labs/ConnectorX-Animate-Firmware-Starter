@@ -14,13 +14,6 @@ void setup()
     }
   }
 
-#if CX_BOARD_FEATURES_ENABLE_DEVICES
-  // TODO: auto-register a list of built-in devices when initializing
-  SystemManagerService.registerModuleType(
-      "VL53L1X", [](const Configuration::Sensor &cfg)
-      { return std::make_shared<Modules::Builtin::VL53L1XModule>(cfg); });
-#endif
-
   success = SystemManagerService.initServices();
   if (!success)
   {
