@@ -7,7 +7,7 @@
 #include <optional>
 #include <string_view>
 
-#include "generated/config_variant.h"
+#include "ConfigurationParser/Configuration.h"
 
 namespace Animation {
 enum class StateMode {
