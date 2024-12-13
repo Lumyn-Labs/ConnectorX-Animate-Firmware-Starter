@@ -99,6 +99,8 @@ Note: The Animations in [`include/animations/BuiltInAnimations.h`](/include/anim
 
 ### Flashing firmware
 
+On the left pane, click the PlatformIO icon (the ant), then open the folder labeled `pico` and click `General > Upload` after ensuring your board is available for flashing (see [Flash a default UF2](#flash-a-default-uf2) and follow through step 3).
+
 ### :warning: BE CAREFUL :warning:
 
 PlatformIO gives the option to **Upload Filesystem Image**. DO NOT CLICK THIS because the ConnectorX ships with its filesystem already flashed with important internal files that will render the device **inoperable** if deleted/overwritten.
