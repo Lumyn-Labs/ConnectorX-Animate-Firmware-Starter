@@ -13,7 +13,7 @@
 #include "ConfigurationParser/configs/Bitmap.h"
 #include "ConfigurationParser/configs/Channel.h"
 #include "ConfigurationParser/configs/Network.h"
-#include "ConfigurationParser/configs/Sensor.h"
+#include "ConfigurationParser/configs/Module.h"
 #include "constants/board_variant.h"
 
 namespace Configuration {
