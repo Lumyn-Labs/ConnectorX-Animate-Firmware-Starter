@@ -1,29 +1,84 @@
-# ConnectorX-Animate-Fimware-Starter
+# ConnectorX Animate - Custom Firmware Starter
 
-- [ConnectorX-Animate-Fimware-Starter](#connectorx-animate-fimware-starter)
-  - [What can you do with custom firmware?](#what-can-you-do-with-custom-firmware)
+Create custom animations and behaviors for your ConnectorX Animate board using the Lumyn Labs SDK.
+
+- [ConnectorX Animate - Custom Firmware Starter](#connectorx-animate---custom-firmware-starter)
+  - [Quick Start](#quick-start)
+  - [SDK Setup](#sdk-setup)
+  - [Creating Custom Animations](#creating-custom-animations)
   - [Recovery](#recovery)
-    - [Flash a default UF2](#flash-a-default-uf2)
-    - [Revert to empty main.cpp](#revert-to-empty-maincpp)
-  - [Set up](#set-up)
-    - [Install PlatformIO](#install-platformio)
-    - [main.cpp](#maincpp)
-    - [Register Custom Animations](#register-custom-animations)
-      - [What is an Animation?](#what-is-an-animation)
-      - [More about `Animation::AnimationFrameCallback`](#more-about-animationanimationframecallback)
-      - [Creating one](#creating-one)
-      - [Registration](#registration)
-    - [Flashing firmware](#flashing-firmware)
-    - [:warning: BE CAREFUL :warning:](#warning-be-careful-warning)
-  - [Available classes/methods](#available-classesmethods)
-    - [SystemManagerService](#systemmanagerservice)
-    - [LedService](#ledservice)
-    - [SerialLogger](#seriallogger)
-    - [EventingService](#eventingservice)
+  - [Project Structure](#project-structure)
 
-## What can you do with custom firmware?
+## Quick Start
 
-At Lumyn Labs, we believe in empowering everyone to truly "connect anything", which also means letting you to use your device in the way you want. Whether it's creating a new Animation for use in a Sequence or adding a Custom Module to read from a favorite sensor, custom firmware allows for it all. By using this repository, you can leverage the existing ConnectorX infrastructure/libraries to do incredible things.
+1. **Install PlatformIO** - VS Code extension recommended
+2. **Copy SDK files** - See [SDK Setup](#sdk-setup) below
+3. **Build & Flash** - `pio run -t upload` or use PlatformIO GUI
+
+## SDK Setup
+
+Before building, copy the SDK files to your project:
+
+```
+lib/
+└── LumynLabsSDK/
+    ├── include/           # SDK headers
+    │   ├── LumynLabs.h    # Main entry point
+    │   └── LumynLabs/     # API headers
+    └── lib/
+        └── libLumynLabsSDK.a  # Pre-compiled library
+```
+
+The SDK provides:
+- Animation registration and playback
+- LED control and color management
+- Network communication
+- Display APIs
+- Module/sensor support
+
+## Creating Custom Animations
+
+Define animations using `LumynLabs::AnimationInstance`:
+
+```cpp
+#include <LumynLabs.h>
+
+static LumynLabs::AnimationInstance MyBlink = {
+    .id = "MY_BLINK",                              // Unique identifier
+    .stateMode = LumynLabs::AnimationStateMode::Constant,
+    .stateCount = 2,                               // Two states: on/off
+    .defaultDelay = 500,                           // 500ms per state
+    .defaultColor = LumynLabs::Color::Blue(),
+    .cb = [](LumynLabs::Color* strip, LumynLabs::Color color, 
+             uint16_t state, uint16_t count) {
+        LumynLabs::Color c = (state == 0) ? color : LumynLabs::Color::Black();
+        for (uint16_t i = 0; i < count; i++) {
+            strip[i] = c;
+        }
+        return true;  // Show the update
+    }
+};
+
+void setup() {
+    SystemManagerService.init();
+    AnimationMngr.registerAnimation(MyBlink);  // Register before initServices
+    SystemManagerService.initServices();
+}
+```
+
+### Animation Callback Parameters
+
+| Parameter | Description                        |
+| --------- | ---------------------------------- |
+| `strip`   | Array of LED colors to modify      |
+| `color`   | Currently selected animation color |
+| `state`   | Current state (0 to stateCount-1)  |
+| `count`   | Total number of LEDs               |
+
+### State Modes
+
+- **Constant** - Fixed number of states (e.g., blink: 2 states)
+- **LedCount** - States = LED count + stateCount (for chase/wave effects)
 
 ## Recovery
 
