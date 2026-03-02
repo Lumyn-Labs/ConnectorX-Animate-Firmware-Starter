@@ -17,7 +17,7 @@
 
 // Feature Flags - use these in #if directives
 #define CX_FEATURE_LED 1
-#define CX_FEATURE_MODULES 0
+#define CX_FEATURE_MODULES 1
 #define CX_FEATURE_SCREEN 0
 #define CX_FEATURE_SD_CARD 1
 #define CX_FEATURE_INDICATORS 1
