@@ -175,9 +175,10 @@ void setup()
   // LumynLabs::Led::setColor("zone2", LumynLabs::Color::Green());
 }
 
-void loop() { delay(10000); }
+// The SDK runs everything in its own tasks, so loop() ends its task and
+// frees the task's 4 KB stack for the heap. To run code in a loop instead,
+// replace this with your loop() and keep in mind the 4 KB it costs.
+void loop() { vTaskDelete(NULL); }
 
-// Second core setup, safest to do nothing here
-void setup1() {}
-
-void loop1() { delay(10000); }
+// No setup1() or loop1(): defining either starts a second task with another
+// 4 KB stack.
