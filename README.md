@@ -1,179 +1,78 @@
 # ConnectorX Animate - Custom Firmware Starter
 
-Create custom animations and behaviors for your ConnectorX Animate board using the Lumyn Labs SDK.
+Custom firmware for ConnectorX Animate: your own animations and modules, built on the Lumyn Labs SDK. Everything the stock firmware does keeps working, including Lumyn Studio, the WPILib vendordep and the other SDKs.
 
-- [ConnectorX Animate - Custom Firmware Starter](#connectorx-animate---custom-firmware-starter)
-  - [Quick Start](#quick-start)
-  - [SDK Setup](#sdk-setup)
-  - [Creating Custom Animations](#creating-custom-animations)
-  - [Recovery](#recovery)
-  - [Project Structure](#project-structure)
+## Quick start
 
-## Quick Start
+1. Install PlatformIO (the VS Code extension is easiest). On Windows, [enable long file paths](https://arduino-pico.readthedocs.io/en/latest/platformio.html#important-steps-for-windows-users-before-installing) first.
+2. Open this folder. PlatformIO installs the toolchain and libraries, which takes a few minutes the first time.
+3. Edit `src/main.cpp`, then build and flash: `pio run -t upload`, or **Upload** in the PlatformIO pane.
 
-1. **Install PlatformIO** - VS Code extension recommended
-2. **Copy SDK files** - See [SDK Setup](#sdk-setup) below
-3. **Build & Flash** - `pio run -t upload` or use PlatformIO GUI
+The SDK is already in `lib/LumynLabsSDK/` (headers in `include/`, the compiled library in `lib/`). Keep the build flags in `platformio.ini`: the SDK is compiled with that USB configuration (`CFG_TUSB_CONFIG_FILE`) and ArduinoJson version, and your firmware must match them.
 
-## SDK Setup
-
-Before building, copy the SDK files to your project:
-
-```
-lib/
-└── LumynLabsSDK/
-    ├── include/           # SDK headers
-    │   ├── LumynLabs.h    # Main entry point
-    │   └── LumynLabs/     # API headers
-    └── lib/
-        └── libLumynLabsSDK.a  # Pre-compiled library
-```
-
-The SDK provides:
-- Animation registration and playback
-- LED control and color management
-- Network communication
-- Display APIs
-- Module/sensor support
-
-## Creating Custom Animations
-
-Define animations using `LumynLabs::AnimationInstance`:
+## Startup order
 
 ```cpp
-#include <LumynLabs.h>
-
-static LumynLabs::AnimationInstance MyBlink = {
-    .id = "MY_BLINK",                              // Unique identifier
-    .stateMode = LumynLabs::AnimationStateMode::Constant,
-    .stateCount = 2,                               // Two states: on/off
-    .defaultDelay = 500,                           // 500ms per state
-    .defaultColor = LumynLabs::Color::Blue(),
-    .cb = [](LumynLabs::Color* strip, LumynLabs::Color color, 
-             uint16_t state, uint16_t count) {
-        LumynLabs::Color c = (state == 0) ? color : LumynLabs::Color::Black();
-        for (uint16_t i = 0; i < count; i++) {
-            strip[i] = c;
-        }
-        return true;  // Show the update
-    }
-};
-
 void setup() {
-    SystemManagerService.init();
-    AnimationMngr.registerAnimation(MyBlink);  // Register before initServices
-    SystemManagerService.initServices();
+  LumynLabs::System::init(true);  // true sends logs to the board's second USB serial port
+  // Register your animations and modules here, before initServices().
+  LumynLabs::System::initServices();
 }
 ```
 
-### Animation Callback Parameters
+## Custom animations
 
-| Parameter | Description                        |
-| --------- | ---------------------------------- |
-| `strip`   | Array of LED colors to modify      |
-| `color`   | Currently selected animation color |
-| `state`   | Current state (0 to stateCount-1)  |
-| `count`   | Total number of LEDs               |
+An animation is an `Effect`. `step()` moves it on by one tick and `draw()` paints the current frame, which starts cleared each time. Ticks run 60 times a second at the animation's default delay; a command with a shorter delay runs them faster. `make()` builds a fresh effect for each zone it plays on, so an effect can size its state to the zone.
 
-### State Modes
+```cpp
+class BlinkEffect : public LumynLabs::Effect {
+public:
+  void step() override { _tick = (_tick + 1) % 60; }
+  void draw(LumynLabs::Frame &frame) override {
+    if (_tick >= 30) return;  // off for the second half
+    for (int i = 0; i < frame.size(); i++) frame.pixels[i] = frame.color;
+  }
+private:
+  uint32_t _tick = 0;
+};
 
-- **Constant** - Fixed number of states (e.g., blink: 2 states)
-- **LedCount** - States = LED count + stateCount (for chase/wave effects)
+static const LumynLabs::AnimationInstance MyBlink = {
+    .id = "MY_BLINK",           // the name commands and sequences use
+    .defaultDelay = 500,
+    .defaultColor = LumynLabs::Color::Blue(),
+    .cycleTicks = 60,           // one cycle; a sequence step plays one
+    .flags = 0,                 // AnimationFlag, in lumyn/definitions/led/AnimationInstance.h
+    .make = [](uint16_t, uint16_t) -> std::unique_ptr<LumynLabs::Effect> {
+      return std::make_unique<BlinkEffect>();
+    }};
+
+// In setup(), before initServices():
+LumynLabs::registerAnimation(MyBlink);
+```
+
+A frame is the zone's pixels row by row from the top left (`frame.at(x, y)`); a strip is one row. Play it from robot code or Lumyn Studio by its name, `MY_BLINK`. `src/main.cpp` has three more examples.
+
+## Custom modules
+
+A module reads a sensor, or drives something, on the board's I2C connector. Robot code receives what `readData()` returns at the module's polling rate, and can send the module JSON, which arrives in `handleReceivedJson()`.
+
+`src/OledModule.h` is a complete one: it shows text on a 0.96" SSD1306 OLED and reports whether the screen answers. Register it, then add it to the device's config as a module of type `SSD1306` on I2C:
+
+```cpp
+LumynLabs::registerModule<OledStatus, OledModule>("SSD1306");
+```
+
+ConnectorX Animate runs up to two modules, all on I2C.
+
+The SDK includes Adafruit GFX, BusIO and SSD1306, and FastLED. Use them from the SDK and don't add them to `lib_deps`: a second copy won't link.
 
 ## Recovery
 
-### Flash a default UF2
+If your firmware gets the board stuck, flash the stock firmware:
 
-Before we get into how new firmware is written and flashed to your ConnectorX, let's go over what to do if you or your device get stuck. This repository contains a default UF2 file that is identical in function to the image that shipped on your device (no custom Modules or Animations), although be aware that future releases of the firmware will also be reflected in it, such as bug fixes or a new feature. Every ConnectorX is based on an RP2040 chip and can be flashed in the same way!
+1. Hold **BOOTSEL**, press and release **RST**, then release **BOOTSEL**. A drive appears on your computer.
+2. Copy [`firmware/firmware.uf2`](firmware/firmware.uf2) to it. The board restarts with the stock firmware.
 
-With the board plugged into your computer, simply:
+This works whatever is running on the board.
 
-1. Hold down the `BOOT`/`BOOTSEL` button near the USB-C port
-2. While holding the button, click `RST`/`RESET` and _continue_ holding the `BOOT`/`BOOTSEL` button
-3. Release the `BOOT`/`BOOTSEL` button when a drive mounts to your computer
-4. Drag-n-drop the UF2 file found [here](/firmware/firmware.uf2) in the repository and wait for it to upload
-5. Watch as your ConnectorX reboots
-
-This process will work regardless of the software running on the ConnectorX, so if you accidentally created an infinite loop- no worries!
-
-### Revert to empty main.cpp
-
-Alternatively, follow the instructions below to compile the default firmware locally and then flash via PlatformIO
-
-## Set up
-
-### Install PlatformIO
-
-After cloning the repository and opening in VS Code, [install the PlatformIO extension](https://marketplace.visualstudio.com/items?itemName=platformio.platformio-ide) and then [follow these instructions](https://arduino-pico.readthedocs.io/en/latest/platformio.html#important-steps-for-windows-users-before-installing) if you're on Windows to enable long filepaths.
-
-Re-open the repository in VS Code after rebooting and watch as PlatformIO installs the necessary toolchains, libraries, and board files automatically. Do note that this step can take several minutes, so be patient.
-
-### main.cpp
-
-With PlatformIO installed, open [main.cpp](/src/main.cpp) and notice the `TODO` comment between the two `init()` calls. Ordering here is **very** important since `init()` sets up the board's basic functionality and gives a place for your custom Animations to go while `initServices()` then takes the registered entities and allows the Configuration in code or on your SD card to use them.
-
-### Register Custom Animations
-
-#### What is an Animation?
-
-LED Animations revolve around the core concept of "states". If an LED blinks on or off, it has 2 states ('on' and 'off'). If an LED breathes (gradually moves to full brightness and then back to off), it has 512 states: 256 when going up (0 to 255) and 256 more when going back down (256 to 511). Your Animations must follow this same model. Because some Animations depend on the number of LEDs in addition to a set number of states (think Chase or one where the LEDs 'grow' along the entire strip), we have the concept of a `StateMode` which can be either `Constant` (number of states never changes) or `LedCount` (number of states is related to the number of LEDs). If it's `LedCount`, then the number of states is: `# of LEDs + the state count`.
-
-Let's go through the core building block of every Animation: the `Animation::AnimationInstance` struct:
-
-|  Member name   |                Type                 |                              Description                               |
-| :------------: | :---------------------------------: | :--------------------------------------------------------------------: |
-|      `id`      |         `std::string_view`          | The ID to reference this Animation in commands and Animation Sequences |
-|  `stateMode`   |       `Animation::StateMode`        |    `Constant` for constant; `LedMode` for LED count + `stateCount`     |
-|  `stateCount`  |             `uint16_t`              |                            Number of states                            |
-| `defaultDelay` |             `uint16_t`              |      The default delay between each state update in milliseconds       |
-| `defaultColor` |    `Configuration::ActionColor`     |   The default color of the Animation given as 8-bit `r, g, b` values   |
-|      `cb`      | `Animation::AnimationFrameCallback` |            The function called every time the state updates            |
-
-#### More about `Animation::AnimationFrameCallback`
-
-This function is called every time the state changes. The signature is: `std::function<bool(CRGB*, CRGB, uint16_t, uint16_t)>` with the parameters of:
-
-|  Name   |    Type    |                                                      Description                                                       |
-| :-----: | :--------: | :--------------------------------------------------------------------------------------------------------------------: |
-| `strip` |  `CRGB*`   |   The array of raw color values. This corresponds 1:1 with the zone so do not modify values outside of its boundary    |
-| `color` |   `CRGB`   |  The requested color. Note that this may be ignored depending on the Animation's needs (such as a rainbow animation)   |
-| `state` | `uint16_t` |        The current, 0-indexed state that the callback needs to handle. It is incremented automatically for you         |
-| `count` | `uint16_t` | The number of LEDs in the Zone. This must be used when updating the `strip` array in order to not exceed its boundary! |
-
-The callback **must** return a `bool`. Return `true` if the Channel should be updated for this Animation's state or `false` to not update.
-
-#### Creating one
-
-To create a custom Animation, it is recommended to create a new header file (`.h`) inside the [animations folder](/include/animations) with the name of your custom Animation. It must be of the type `Animation::AnimationInstance` and have a name that does not conflict with any existing Animations. After creating your Animation, include the header file in `main.cpp` and then register it:
-
-#### Registration
-
-Simply call `AnimationMngr.registerAnimation(std::move(MyAnimationStruct));` where `MyAnimationStruct` is the name of your `static Animation::AnimationInstance` value.
-
-Note: The Animations in [`include/animations/BuiltInAnimations.h`](/include/animations/BuiltInAnimations.h) are registered **automatically** by the system and shouldn't typically be modified!
-
-### Flashing firmware
-
-On the left pane, click the PlatformIO icon (the ant), then open the folder labeled `pico` and click `General > Upload` after ensuring your board is available for flashing (see [Flash a default UF2](#flash-a-default-uf2) and follow through step 3).
-
-### :warning: BE CAREFUL :warning:
-
-PlatformIO gives the option to **Upload Filesystem Image**. DO NOT CLICK THIS because the ConnectorX ships with its filesystem already flashed with important internal files that will render the device **inoperable** if deleted/overwritten.
-
-## Available classes/methods
-
-### SystemManagerService
-
-Used to initialize the system. Optionally, you can call `getStatus`, `getErrorFlags`, or `getAssignedId` to check on your Device's status. **Do not call start()** as this will start additional `SystemService` tasks in the RTOS and lead to conflicts.
-
-### LedService
-
-In here, you can manually register additional Channels, Animations, Animation Sequences, and Image Sequences. There are also methods that expose sending asynchronous LED commands from your code.
-
-### SerialLogger
-
-Use `SerialLogger` to log messages via the secondary serial port in a thread-safe way. There are 5 different logging levels: `Verbose`, `Info`, `Warn`, `Error`, and `Fatal`.
-
-### EventingService
-
-You can send an `Eventing::Event` with a call to `EventService.sendEvent()`. If calling from an interrupt, use `EventService.sendEventFromISR()`.
+Don't use PlatformIO's **Upload Filesystem Image**: it erases files the board needs.

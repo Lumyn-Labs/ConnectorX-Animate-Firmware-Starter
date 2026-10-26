@@ -12,67 +12,107 @@
 #include <LumynLabs.h>
 #include <LumynLabs/CxAnimate.h>
 
+#include "OledModule.h"
+
 // =============================================================================
 // Custom Animations
 // =============================================================================
+//
+// An animation is an Effect: step() moves it on by one tick and draw() paints
+// the current frame. Ticks run at 60 per second at the animation's default
+// delay; a command with a shorter delay runs them faster, a longer one slower.
+// make() builds a fresh effect for each zone it plays on.
+
+static constexpr uint32_t kTicksPerSecond = 60;
 
 /**
  * Example: Simple fill animation
- * Fills all LEDs with the selected color.
+ * Fills the zone with the selected color.
  */
-static LumynLabs::AnimationInstance CustomFill = {
+class FillEffect : public LumynLabs::Effect
+{
+public:
+  void step() override {}
+  void draw(LumynLabs::Frame &frame) override
+  {
+    for (int i = 0; i < frame.size(); i++)
+    {
+      frame.pixels[i] = frame.color;
+    }
+  }
+};
+
+static const LumynLabs::AnimationInstance CustomFill = {
     .id = "CUSTOM_FILL",
-    .stateMode = LumynLabs::AnimationStateMode::Constant,
-    .stateCount = 1, // Single state - static fill
     .defaultDelay = 20000,
     .defaultColor = LumynLabs::Color::Blue(),
-    .cb = [](LumynLabs::Color *strip, LumynLabs::Color color, uint16_t state, uint16_t count)
-    {
-      for (uint16_t i = 0; i < count; i++)
-      {
-        strip[i] = color;
-      }
-      return true; // Update the LEDs
-    }};
+    .cycleTicks = 1,
+    .flags = 0,
+    .make = [](uint16_t, uint16_t) -> std::unique_ptr<LumynLabs::Effect>
+    { return std::make_unique<FillEffect>(); }};
 
 /**
  * Example: Simple blink animation
- * Alternates between color and off.
+ * On for half a second, then off for half a second.
  */
-static LumynLabs::AnimationInstance CustomBlink = {
+class BlinkEffect : public LumynLabs::Effect
+{
+public:
+  static constexpr uint32_t kPeriod = kTicksPerSecond;
+
+  void step() override { _tick = (_tick + 1) % kPeriod; }
+  void draw(LumynLabs::Frame &frame) override
+  {
+    if (_tick >= kPeriod / 2)
+      return; // A frame starts cleared, so off is drawing nothing.
+    for (int i = 0; i < frame.size(); i++)
+    {
+      frame.pixels[i] = frame.color;
+    }
+  }
+
+private:
+  uint32_t _tick = 0;
+};
+
+static const LumynLabs::AnimationInstance CustomBlink = {
     .id = "CUSTOM_BLINK",
-    .stateMode = LumynLabs::AnimationStateMode::Constant,
-    .stateCount = 2, // Two states: on and off
     .defaultDelay = 500,
     .defaultColor = LumynLabs::Color::Red(),
-    .cb = [](LumynLabs::Color *strip, LumynLabs::Color color, uint16_t state, uint16_t count)
-    {
-      LumynLabs::Color c = (state == 0) ? color : LumynLabs::Color::Black();
-      for (uint16_t i = 0; i < count; i++)
-      {
-        strip[i] = c;
-      }
-      return true;
-    }};
+    .cycleTicks = BlinkEffect::kPeriod,
+    .flags = 0,
+    .make = [](uint16_t, uint16_t) -> std::unique_ptr<LumynLabs::Effect>
+    { return std::make_unique<BlinkEffect>(); }};
 
 /**
- * Example: Chase animation (LED count based)
- * A single lit LED moves along the strip.
+ * Example: Chase animation
+ * A single lit LED crosses the zone every two seconds.
  */
-static LumynLabs::AnimationInstance CustomChase = {
+class ChaseEffect : public LumynLabs::Effect
+{
+public:
+  static constexpr uint32_t kCycle = 2 * kTicksPerSecond;
+
+  ChaseEffect(uint16_t width, uint16_t height) : _count(width * height) {}
+  void step() override { _tick = (_tick + 1) % kCycle; }
+  void draw(LumynLabs::Frame &frame) override
+  {
+    frame.pixels[_tick * _count / kCycle] = frame.color;
+  }
+
+private:
+  uint32_t _count;
+  uint32_t _tick = 0;
+};
+
+static const LumynLabs::AnimationInstance CustomChase = {
     .id = "CUSTOM_CHASE",
-    .stateMode = LumynLabs::AnimationStateMode::LedCount, // State count = LED count
-    .stateCount = 0,
     .defaultDelay = 50,
     .defaultColor = LumynLabs::Color::Green(),
-    .cb = [](LumynLabs::Color *strip, LumynLabs::Color color, uint16_t state, uint16_t count)
-    {
-      for (uint16_t i = 0; i < count; i++)
-      {
-        strip[i] = (i == state) ? color : LumynLabs::Color::Black();
-      }
-      return true;
-    }};
+    .cycleTicks = ChaseEffect::kCycle,
+    .flags = 0,
+    .make = [](uint16_t width, uint16_t height) -> std::unique_ptr<LumynLabs::Effect>
+    { return std::make_unique<ChaseEffect>(width, height); }};
 
 // =============================================================================
 // Setup & Loop
@@ -95,6 +135,10 @@ void setup()
   LumynLabs::registerAnimation(CustomFill);
   LumynLabs::registerAnimation(CustomBlink);
   LumynLabs::registerAnimation(CustomChase);
+
+  // Register your custom modules. A config's module of type "SSD1306" runs
+  // this one.
+  LumynLabs::registerModule<OledStatus, OledModule>("SSD1306");
 
   // Complete initialization (starts services)
   success = LumynLabs::System::initServices();
