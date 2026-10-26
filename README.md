@@ -18,7 +18,11 @@ void setup() {
   // Register your animations and modules here, before initServices().
   LumynLabs::System::initServices();
 }
+
+void loop() { vTaskDelete(NULL); }
 ```
+
+The SDK runs in its own tasks, so `loop()` ends its task and frees its 4 KB stack for the heap. A `loop()` that keeps running costs those 4 KB, and so does defining `setup1()` or `loop1()`, which starts a task on the second core.
 
 ## Custom animations
 
