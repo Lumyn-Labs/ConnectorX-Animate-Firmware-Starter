@@ -2,10 +2,8 @@
 // ConnectorX Animate - Custom Firmware Example
 // =============================================================================
 //
-// This example demonstrates how to create and register custom animations
-// using the Lumyn Labs SDK.
-//
-// For more examples, see the animations/ folder.
+// Three custom animations and a custom module (OledModule.h), registered
+// with the Lumyn Labs SDK.
 // =============================================================================
 
 #include <Arduino.h>
@@ -22,8 +20,6 @@
 // the current frame. Ticks run at 60 per second at the animation's default
 // delay; a command with a shorter delay runs them faster, a longer one slower.
 // make() builds a fresh effect for each zone it plays on.
-
-static constexpr uint32_t kTicksPerSecond = 60;
 
 /**
  * Example: Simple fill animation
@@ -47,9 +43,9 @@ static const LumynLabs::AnimationInstance CustomFill = {
     .defaultDelay = 20000,
     .defaultColor = LumynLabs::Color::Blue(),
     .cycleTicks = 1,
-    .flags = 0,
-    .make = [](uint16_t, uint16_t) -> std::unique_ptr<LumynLabs::Effect>
-    { return std::make_unique<FillEffect>(); }};
+    // Still: it redraws only when its color changes.
+    .flags = LumynLabs::kStill,
+    .make = LumynLabs::makeEffect<FillEffect>};
 
 /**
  * Example: Simple blink animation
@@ -58,7 +54,7 @@ static const LumynLabs::AnimationInstance CustomFill = {
 class BlinkEffect : public LumynLabs::Effect
 {
 public:
-  static constexpr uint32_t kPeriod = kTicksPerSecond;
+  static constexpr uint32_t kPeriod = LumynLabs::kTicksPerSecond;
 
   void step() override { _tick = (_tick + 1) % kPeriod; }
   void draw(LumynLabs::Frame &frame) override
@@ -81,8 +77,7 @@ static const LumynLabs::AnimationInstance CustomBlink = {
     .defaultColor = LumynLabs::Color::Red(),
     .cycleTicks = BlinkEffect::kPeriod,
     .flags = 0,
-    .make = [](uint16_t, uint16_t) -> std::unique_ptr<LumynLabs::Effect>
-    { return std::make_unique<BlinkEffect>(); }};
+    .make = LumynLabs::makeEffect<BlinkEffect>};
 
 /**
  * Example: Chase animation
@@ -91,17 +86,17 @@ static const LumynLabs::AnimationInstance CustomBlink = {
 class ChaseEffect : public LumynLabs::Effect
 {
 public:
-  static constexpr uint32_t kCycle = 2 * kTicksPerSecond;
+  static constexpr uint32_t kCycle = 2 * LumynLabs::kTicksPerSecond;
 
-  ChaseEffect(uint16_t width, uint16_t height) : _count(width * height) {}
   void step() override { _tick = (_tick + 1) % kCycle; }
   void draw(LumynLabs::Frame &frame) override
   {
-    frame.pixels[_tick * _count / kCycle] = frame.color;
+    if (frame.size() == 0)
+      return;
+    frame.pixels[_tick * frame.size() / kCycle] = frame.color;
   }
 
 private:
-  uint32_t _count;
   uint32_t _tick = 0;
 };
 
@@ -111,8 +106,7 @@ static const LumynLabs::AnimationInstance CustomChase = {
     .defaultColor = LumynLabs::Color::Green(),
     .cycleTicks = ChaseEffect::kCycle,
     .flags = 0,
-    .make = [](uint16_t width, uint16_t height) -> std::unique_ptr<LumynLabs::Effect>
-    { return std::make_unique<ChaseEffect>(width, height); }};
+    .make = LumynLabs::makeEffect<ChaseEffect>};
 
 // =============================================================================
 // Setup & Loop
@@ -120,7 +114,7 @@ static const LumynLabs::AnimationInstance CustomChase = {
 
 void setup()
 {
-  // Initialize the system (networking, display, etc.)
+  // Start the board's services; true sends logs to the second USB serial port.
   bool success = LumynLabs::System::init(true);
   if (!success)
   {
@@ -160,7 +154,8 @@ void setup()
   // Common zone IDs include "zone1", "zone2", etc. or custom names you define.
   //
   // This sets the custom chase animation on "zone1" with:
-  //   - 100ms delay between animation frames
+  //   - a delay of 100: half speed, since its default delay is 50
+  //     (speed = default delay / delay)
   //   - Purple color
   //   - Normal direction (not reversed)
   //   - Continuous loop (not one-shot)

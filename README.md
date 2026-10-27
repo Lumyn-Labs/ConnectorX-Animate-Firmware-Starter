@@ -8,7 +8,7 @@ Custom firmware for ConnectorX Animate: your own animations and modules, built o
 2. Open this folder. PlatformIO installs the toolchain and libraries, which takes a few minutes the first time.
 3. Edit `src/main.cpp`, then build and flash: `pio run -t upload`, or **Upload** in the PlatformIO pane.
 
-The SDK is already in `lib/LumynLabsSDK/` (headers in `include/`, the compiled library in `lib/`). Keep the build flags in `platformio.ini`: the SDK is compiled with that USB configuration (`CFG_TUSB_CONFIG_FILE`) and ArduinoJson version, and your firmware must match them.
+The SDK is already in `lib/LumynLabsSDK/` (headers in `include/`, the compiled library in `lib/`). Keep `platformio.ini` as it is: the SDK is compiled against that pinned platform, with that USB configuration (`CFG_TUSB_CONFIG_FILE`), interrupt table (`maxIRQs`) and FreeRTOS settings, and your firmware must match them. The SDK's `library.json` pins the ArduinoJson version it was built with.
 
 ## Startup order
 
@@ -26,7 +26,7 @@ The SDK runs in its own tasks, so `loop()` ends its task and frees its 4 KB stac
 
 ## Custom animations
 
-An animation is an `Effect`. `step()` moves it on by one tick and `draw()` paints the current frame, which starts cleared each time. Ticks run 60 times a second at the animation's default delay; a command with a shorter delay runs them faster. `make()` builds a fresh effect for each zone it plays on, so an effect can size its state to the zone.
+An animation is an `Effect`. `step()` moves it on by one tick and `draw()` paints the current frame, which starts cleared each time. Ticks run 60 times a second at the animation's default delay; a command with a shorter delay runs them faster, up to 10 times as fast. `make()` builds a fresh effect for each zone it plays on, so an effect can size its state to the zone.
 
 ```cpp
 class BlinkEffect : public LumynLabs::Effect {
@@ -45,10 +45,8 @@ static const LumynLabs::AnimationInstance MyBlink = {
     .defaultDelay = 500,
     .defaultColor = LumynLabs::Color::Blue(),
     .cycleTicks = 60,           // one cycle; a sequence step plays one
-    .flags = 0,                 // AnimationFlag, in lumyn/definitions/led/AnimationInstance.h
-    .make = [](uint16_t, uint16_t) -> std::unique_ptr<LumynLabs::Effect> {
-      return std::make_unique<BlinkEffect>();
-    }};
+    .flags = 0,                 // LumynLabs::kStill and the other flags, in LumynLabs/Led/Animation.h
+    .make = LumynLabs::makeEffect<BlinkEffect>};
 
 // In setup(), before initServices():
 LumynLabs::registerAnimation(MyBlink);
@@ -68,7 +66,7 @@ LumynLabs::registerModule<OledStatus, OledModule>("SSD1306");
 
 ConnectorX Animate runs up to two modules, all on I2C.
 
-The SDK includes Adafruit GFX, BusIO and SSD1306, and FastLED. Use them from the SDK and don't add them to `lib_deps`: a second copy won't link.
+The SDK includes Adafruit GFX, BusIO and SSD1306, and FastLED, and pins ArduinoJson. Use them from the SDK and don't add any of them to `lib_deps`: a second copy won't link, and another ArduinoJson version breaks modules' JSON.
 
 ## Recovery
 
