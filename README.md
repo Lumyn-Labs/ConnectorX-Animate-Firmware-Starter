@@ -58,10 +58,10 @@ A frame is the zone's pixels row by row from the top left (`frame.at(x, y)`); a 
 
 A module reads a sensor, or drives something, on the board's I2C connector. Robot code receives what `readData()` returns at the module's polling rate, and can send the module JSON, which arrives in `handleReceivedJson()`.
 
-`src/OledModule.h` is a complete one: it shows text on a 0.96" SSD1306 OLED and reports whether the screen answers. Register it, then add it to the device's config as a module of type `SSD1306` on I2C:
+Register yours in `setup()`, before `initServices()`, by the type name a config gives it, then add it to the device's config as a module of that type on I2C:
 
 ```cpp
-LumynLabs::registerModule<OledStatus, OledModule>("SSD1306");
+LumynLabs::registerModule<MyData, MyModule>("MyModule");
 ```
 
 ConnectorX Animate runs up to two modules, all on I2C.

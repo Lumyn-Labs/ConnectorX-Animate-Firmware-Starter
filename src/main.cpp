@@ -2,15 +2,12 @@
 // ConnectorX Animate - Custom Firmware Example
 // =============================================================================
 //
-// Three custom animations and a custom module (OledModule.h), registered
-// with the Lumyn Labs SDK.
+// Three custom animations, registered with the Lumyn Labs SDK.
 // =============================================================================
 
 #include <Arduino.h>
 #include <LumynLabs.h>
 #include <LumynLabs/CxAnimate.h>
-
-#include "OledModule.h"
 
 // =============================================================================
 // Custom Animations
@@ -129,10 +126,6 @@ void setup()
   LumynLabs::registerAnimation(CustomFill);
   LumynLabs::registerAnimation(CustomBlink);
   LumynLabs::registerAnimation(CustomChase);
-
-  // Register your custom modules. A config's module of type "SSD1306" runs
-  // this one.
-  LumynLabs::registerModule<OledStatus, OledModule>("SSD1306");
 
   // Complete initialization (starts services)
   success = LumynLabs::System::initServices();
